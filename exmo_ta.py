@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy
 import talib
-from pprint import pprint
 
 from mpl_finance import candlestick2_ohlc
 import matplotlib.pyplot as plt
@@ -9,16 +8,15 @@ import matplotlib.ticker as ticker
 from datetime import datetime
 
 from settings import EXMO_API_VER, EXMO_URL, EXMO_API_KEY, EXMO_API_SECRET, PERIOD, PAIR
-from exmo_api import ExmoAPI
+from api import ExmoAPI
 
 api = ExmoAPI(EXMO_API_KEY, EXMO_API_SECRET, EXMO_URL, EXMO_API_VER)
 
-result = api.query('trades', dict(pair=PAIR, limit=7000))
+result = api.get_deals(pair=PAIR, limit=7000)
 if result.get(PAIR):
     chart_data = {}  # сформируем словарь с ценой закрытия по PERIOD минут
 
     for item in reversed(result[PAIR]):
-        print(item)
         d = int(float(item['date']) / (PERIOD * 60)) * (PERIOD * 60)  # Округляем время сделки до PERIOD минут
         if not d in chart_data:
             chart_data[d] = {'open': 0, 'close': 0, 'high': 0, 'low': 0, 'quantity': 0.0}
@@ -35,9 +33,6 @@ if result.get(PAIR):
         if not chart_data[d]['low'] or chart_data[d]['low'] > float(item['price']):
             chart_data[d]['low'] = float(item['price'])
 
-
-    # pprint(chart_data)
-
     quotes = {}
     quotes['open'] = numpy.asarray([chart_data[item]['open'] for item in sorted(chart_data)])
     quotes['close'] = numpy.asarray([chart_data[item]['close'] for item in sorted(chart_data)])
@@ -47,7 +42,7 @@ if result.get(PAIR):
 
     xdate = [datetime.fromtimestamp(item) for item in sorted(chart_data)]
 
-    fig, ax = plt.subplots(6, sharex=True)
+    fig, ax = plt.subplots(5, sharex=True)
 
     candlestick2_ohlc(ax[0], quotes['open'], quotes['high'], quotes['low'], quotes['close'], width=0.6)
 
@@ -66,7 +61,6 @@ if result.get(PAIR):
     fig.tight_layout()
 
     sma = talib.SMA(quotes['close'], timeperiod=50)
-    # pprint(sma)
     ax[0].plot(sma)
 
     ema = talib.EMA(quotes['close'], timeperiod=20)
@@ -95,12 +89,16 @@ if result.get(PAIR):
     ax[4].plot(macd, color="y")
     ax[4].plot(macdsignal)
 
-    hist_data = []
-    for elem in macdhist:
-        if not numpy.isnan(elem):
-            v = 0 if numpy.isnan(elem) else elem
-            hist_data.append(v * 100)
-    ax[5].fill_between([x for x in range(len(macdhist))], 0, macdhist)
+    idx = numpy.argwhere(numpy.diff(numpy.sign(macd - macdsignal)) != 0).reshape(-1) + 0
 
-    plt.savefig("graph.png", dpi=300)
+    inters = []
+
+    for offset, elem in enumerate(macd):
+        if offset in idx:
+            inters.append(elem)
+        else:
+            inters.append(numpy.nan)
+    ax[4].plot(inters, 'ro')
+
+    plt.savefig("graph.png", dpi=400)
 

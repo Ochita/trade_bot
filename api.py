@@ -5,8 +5,13 @@ import time
 import requests
 
 
-class ExmoAPI:
-    def __init__(self, API_KEY, API_SECRET, API_URL = 'api.exmo.com', API_VERSION = 'v1'):
+class API(object):
+    def get_deals(self, pair, limit):
+        raise NotImplementedError
+
+
+class ExmoAPI(API):
+    def __init__(self, API_KEY, API_SECRET, API_URL='api.exmo.com', API_VERSION='v1'):
         self.API_URL = API_URL
         self.API_VERSION = API_VERSION
         self.API_KEY = API_KEY
@@ -29,3 +34,10 @@ class ExmoAPI:
         result = requests.post("https://{0}/{1}/{2}".format(self.API_URL, self.API_VERSION, api_method),
                                data=params, headers=headers)
         return result.json()
+
+    def get_deals(self, pair, limit):
+        return self.query('trades', dict(pair=pair, limit=limit))
+
+
+class FakeExmoAPI(ExmoAPI):
+    pass
