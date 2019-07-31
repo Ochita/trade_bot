@@ -2,7 +2,7 @@ DB_HOST = "ds014808.mlab.com"
 DB_PORT = 14808
 DB_USERNAME = "trader"
 DB_PASSWORD = "mnSJktk5Igcti8ME"
-DB_NAME = "trade_analytics"
+DB_NAME = "trade_bot"
 DB_URL = "mongodb://{0}:{1}@{2}:{3}/{4}".format(DB_USERNAME, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
 
 EXMO_API_VER = 'v1'
