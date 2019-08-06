@@ -12,7 +12,7 @@ from api import ExmoAPI
 
 api = ExmoAPI(EXMO_API_KEY, EXMO_API_SECRET, EXMO_URL, EXMO_API_VER)
 
-result = api.get_deals(pair=PAIR, limit=7000)
+result = api.get_deals(pair=PAIR, limit=10000)
 if result.get(PAIR):
     chart_data = {}  # сформируем словарь с ценой закрытия по PERIOD минут
 
