@@ -8,45 +8,21 @@ import matplotlib.ticker as ticker
 from datetime import datetime
 
 from settings import EXMO_API_VER, EXMO_URL, EXMO_API_KEY, EXMO_API_SECRET, PERIOD, PAIR
-from api import ExmoAPI
+from exmo_api import ExmoAPI
 
-api = ExmoAPI(EXMO_API_KEY, EXMO_API_SECRET, EXMO_URL, EXMO_API_VER)
+api = ExmoAPI(EXMO_API_KEY, EXMO_API_SECRET, EXMO_URL, EXMO_API_VER, PERIOD)
 
-result = api.get_deals(pair=PAIR, limit=10000)
-if result.get(PAIR):
-    chart_data = {}  # сформируем словарь с ценой закрытия по PERIOD минут
+deals = api.get_deals(pair=PAIR, limit=10000)
+if deals:
+    opens, hights, lows, closes, quantities, dates = api.process_deals(deals)
 
-    for item in reversed(result[PAIR]):
-        d = int(float(item['date']) / (PERIOD * 60)) * (PERIOD * 60)  # Округляем время сделки до PERIOD минут
-        if not d in chart_data:
-            chart_data[d] = {'open': 0, 'close': 0, 'high': 0, 'low': 0, 'quantity': 0.0}
+    xdate = [datetime.fromtimestamp(item) for item in sorted(dates)]
 
-        chart_data[d]['close'] = float(item['price'])
-        chart_data[d]['quantity'] += float(item['quantity'])
+    fig, ax = plt.subplots(4, sharex=True)
 
-        if not chart_data[d]['open']:
-            chart_data[d]['open'] = float(item['price'])
+    candlestick2_ohlc(ax[0], opens, hights, lows, closes, width=0.6)
 
-        if not chart_data[d]['high'] or chart_data[d]['high'] < float(item['price']):
-            chart_data[d]['high'] = float(item['price'])
-
-        if not chart_data[d]['low'] or chart_data[d]['low'] > float(item['price']):
-            chart_data[d]['low'] = float(item['price'])
-
-    quotes = {}
-    quotes['open'] = numpy.asarray([chart_data[item]['open'] for item in sorted(chart_data)])
-    quotes['close'] = numpy.asarray([chart_data[item]['close'] for item in sorted(chart_data)])
-    quotes['high'] = numpy.asarray([chart_data[item]['high'] for item in sorted(chart_data)])
-    quotes['low'] = numpy.asarray([chart_data[item]['low'] for item in sorted(chart_data)])
-    quotes['quantity'] = numpy.asarray([chart_data[item]['quantity'] for item in sorted(chart_data)])
-
-    xdate = [datetime.fromtimestamp(item) for item in sorted(chart_data)]
-
-    fig, ax = plt.subplots(5, sharex=True)
-
-    candlestick2_ohlc(ax[0], quotes['open'], quotes['high'], quotes['low'], quotes['close'], width=0.6)
-
-    ax[0].xaxis.set_major_locator(ticker.MaxNLocator(6))
+    ax[0].xaxis.set_major_locator(ticker.MaxNLocator(20))
 
 
     def chart_date(x, pos):
@@ -60,45 +36,48 @@ if result.get(PAIR):
     fig.autofmt_xdate()
     fig.tight_layout()
 
-    sma = talib.SMA(quotes['close'], timeperiod=50)
+    sma = talib.SMA(closes, timeperiod=50)
     ax[0].plot(sma)
 
-    ema = talib.EMA(quotes['close'], timeperiod=20)
+    ema = talib.EMA(closes, timeperiod=20)
     ax[0].plot(ema)
 
-    hammer = talib.CDLHAMMER(quotes['open'], quotes['high'], quotes['low'], quotes['close'])
-    inverted_hammer = talib.CDLINVERTEDHAMMER(quotes['open'], quotes['high'], quotes['low'], quotes['close'])
-    evening_star = talib.CDLEVENINGSTAR(quotes['open'], quotes['high'], quotes['low'], quotes['close'])
-    morning_star = talib.CDLMORNINGSTAR(quotes['open'], quotes['high'], quotes['low'], quotes['close'])
-    shooting_star = talib.CDLSHOOTINGSTAR(quotes['open'], quotes['high'], quotes['low'], quotes['close'])
-    hanging_man = talib.CDLHANGINGMAN(quotes['open'], quotes['high'], quotes['low'], quotes['close'])
+    trend = numpy.polyfit(range(len(closes) - 10, len(closes)), closes[-10:], 1)
+    trendpoly = numpy.poly1d(trend)
+    ax[0].plot(range(len(closes) - 10, len(closes)), trendpoly(range(len(closes) - 10, len(closes))))
+
+    args = (opens, hights, lows, closes)
+
+    hammer = talib.CDLHAMMER(*args)  # will go up
+    inverted_hammer = talib.CDLINVERTEDHAMMER(*args)  # will go up
+    evening_star = talib.CDLEVENINGSTAR(*args)  # will go down
+    morning_star = talib.CDLMORNINGSTAR(*args)  # will go up
+    shooting_star = talib.CDLSHOOTINGSTAR(*args)  # will go down
+    hanging_man = talib.CDLHANGINGMAN(*args)  # will go down
+    engulfing = talib.CDLENGULFING(*args)
     ax[1].plot(hammer)
     ax[1].plot(inverted_hammer)
     ax[1].plot(evening_star)
     ax[1].plot(morning_star)
     ax[1].plot(shooting_star)
     ax[1].plot(hanging_man)
+    ax[1].plot(engulfing)
 
-    rsi = talib.RSI(quotes['close'], timeperiod=20)
+    from utils import TAAnalyser
+
+    taanal = TAAnalyser(opens, hights, lows, closes, quantities, dates)
+    print(taanal.get_rsi_signal())
+
+    rsi = talib.RSI(closes, timeperiod=20)
     ax[2].plot(rsi)
+    rsi_trend = numpy.polyfit(range(len(rsi) - 10, len(rsi)), rsi[-10:], 1)
+    rsi_trendpoly = numpy.poly1d(rsi_trend)
+    ax[2].plot(range(len(rsi) - 10, len(rsi)), rsi_trendpoly(range(len(rsi) - 10, len(rsi))))
+    #
+    # obv = talib.OBV(closes, quantities)
+    # ax[3].plot(obv)
 
-    obv = talib.OBV(quotes['close'], quotes['quantity'])
-    ax[3].plot(obv)
-
-    macd, macdsignal, macdhist = talib.MACD(quotes['close'], fastperiod=12, slowperiod=26, signalperiod=9)
-    ax[4].plot(macd, color="y")
-    ax[4].plot(macdsignal)
-
-    idx = numpy.argwhere(numpy.diff(numpy.sign(macd - macdsignal)) != 0).reshape(-1) + 0
-
-    inters = []
-
-    for offset, elem in enumerate(macd):
-        if offset in idx:
-            inters.append(elem)
-        else:
-            inters.append(numpy.nan)
-    ax[4].plot(inters, 'ro')
-
+    _, _, macdhist = talib.MACD(closes, fastperiod=12, slowperiod=26, signalperiod=9)
+    ax[3].plot(macdhist)  # sell when intersects zero from top, buy when intersects zero from bottom
     plt.savefig("graph.png", dpi=400)
 
